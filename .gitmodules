@@ -1,3 +1,6 @@
 [submodule "family"]
 	path = family
-	url = https://github.com/NanakiPL/community_family.git
+	url = https://github.com/NanakiPL/community_family
+[submodule "luad"]
+	path = include/luad
+	url = https://github.com/NanakiPL/luad.git
