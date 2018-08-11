@@ -1,0 +1,13 @@
+# -*- coding: utf-8  -*-
+from __future__ import unicode_literals
+
+family = 'community'
+mylang = 'pl'
+usernames[family] = {}
+sysopnames[family] = {}
+disambiguation_comment[family] = {}
+family_files = { family: 'family/community_family.py' }
+
+# Keep above as is. Usernames and config follows.
+
+usernames[family][mylang] = 'Username'

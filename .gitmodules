@@ -1,0 +1,3 @@
+[submodule "family"]
+	path = family
+	url = https://github.com/NanakiPL/community_family.git
