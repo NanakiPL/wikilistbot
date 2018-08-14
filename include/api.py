@@ -1,9 +1,7 @@
 # -*- coding: utf-8  -*-
-#from wiki import Wiki
 
 import urllib.parse, urllib.request, urllib.error, json, time, re
 from socket import error as socket_error
-from include.wiki import Wiki, InvalidWiki, ClosedWiki
 
 from pprint import pprint
 
@@ -44,58 +42,43 @@ class JSONError(Exception):
     def __str__(self):
         return '%s (%s)' % (str(self.value), self.url)
 
-def call(path, query = {}):
+def call(path, query = {}, server = None):
     qs = urllib.parse.urlencode(query)
-    url = ''.join([__server, path, '?' if qs else '', qs])
+    url = ''.join([server or __server, path, '?' if qs else '', qs])
     
     return getJSON(url)
 
-
-def prepWikis(l, langs = None):
-    r = []
-    for v in l:
-        try:
-            if v is None: raise InvalidWiki()
-            if langs is not None and len(langs) and v['lang'] not in langs: continue
-            r += [Wiki(v)]
-        except (ClosedWiki, InvalidWiki) as e:
-            r += [e]
-    return r
+def getWikiVariables(wiki):
+    server = 'http://' + wiki.domain + '/api/v1/'
+    
+    res = call('Mercury/WikiVariables', server = server)
+    return res['data']
 
 def getDetails(ids):
-    if isinstance(ids, int): ids = [ids]
+    if isinstance(ids, (int, str)): ids = [ids]
+    ids = [int(i) for i in ids]
     res = call('Wikis/Details', {
         'ids': ','.join(str(x) for x in ids),
         'expand': 1,
         'width': 123,
         'height': 456,
     })
-    return prepWikis([res['items'][str(k)] if str(k) in res['items'] else None for k in ids])
-    
-def getTopWikis(hub = None):
-    res = call('Wikis/List', {
-        'hub': hub,
-        'limit': 250,
-        'expand': 1,
-        'width': 123,
-        'height': 456,
-        #'lang': ','.join(languages), # returns nothing atm
-    })
-    return prepWikis(res['items'], languages)
+    return res['items']
 
-def getWAMIndex(lang = None, limit = 200):
-    l = []
+def getWAMIndex(lang = None, limit = 20):
+    limit = min(limit, 20) # API breaks when limit is above 20 atm
+    lst = []
     options = {
         'sort_column': 'wam',
         'sort_direction': 'DESC',
-        'limit': 20,
+        'limit': limit,
         'offset': 0,
     }
     if lang is not None: options['wiki_lang'] = lang
     while True:
         res = call('WAM/WAMIndex', options)
         if len(res['wam_index']) == 0: break
-        l += res['wam_index'].keys()
-        if len(l) >= limit: break
+        lst += [int(i) for i in res['wam_index'].keys()]
+        if len(lst) >= limit: break
         options['offset'] += options['limit']
-    return l
+    return lst
