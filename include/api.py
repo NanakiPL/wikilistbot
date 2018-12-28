@@ -8,6 +8,21 @@ from pprint import pprint
 __server = 'https://www.wikia.com/api/v1/'
 languages = None
 
+__cache = {}
+def cached(fn):
+    name = fn.__module__ + '.' + fn.__name__
+    
+    def decorator(*args, **kwargs):
+        t = (name, hash(args), hash(hash(frozenset(kwargs.items()))))
+        if t in __cache:
+            return __cache[t]
+        
+        data = fn(*args, **kwargs)
+        
+        __cache[t] = data
+        return data
+    return decorator
+
 def getJSON(url, tries = 5, delay = 3):
     t, d = tries, delay
     while t > 1:
@@ -48,22 +63,27 @@ def call(path, query = {}, server = None):
     
     return getJSON(url)
 
-def getWikiVariables(wiki):
-    server = 'http://' + wiki.domain + '/api/v1/'
-    
-    res = call('Mercury/WikiVariables', server = server)
-    return res['data']
+@cached
+def getWikiVariables(url):
+    server = 'http://' + url + '/api/v1/'
+    return call('Mercury/WikiVariables', server = server)['data']
 
 def getDetails(ids):
     if isinstance(ids, (int, str)): ids = [ids]
     ids = [int(i) for i in ids]
-    res = call('Wikis/Details', {
-        'ids': ','.join(str(x) for x in ids),
-        'expand': 1,
-        'width': 123,
-        'height': 456,
-    })
-    return res['items']
+    
+    res = {}
+    while len(ids):
+        lst = ids[:250]
+        ids = ids[250:]
+        subres = call('Wikis/Details', {
+            'ids': ','.join(str(x) for x in lst),
+            'expand': 1,
+            'width': 123,
+            'height': 456,
+        })
+        res = {**res, **subres['items']}
+    return res
 
 def getWAMIndex(lang = None, limit = 20):
     limit = min(limit, 20) # API breaks when limit is above 20 atm

@@ -1,4 +1,6 @@
 # -*- coding: utf-8  -*-
+
+import re
 from datetime import datetime
 from collections import OrderedDict, Container
 
@@ -14,6 +16,9 @@ def newWiki(data):
         return Wiki(data['id']).update(data, True)
     except KeyError:
         return InvalidWiki(data['id']).update(data)
+
+def getCode(text):
+    return re.sub('\.(wikia|fandom)\.com(\/|$)', r'\2', text, flags = re.I)
 
 _wikis = {}
 class Wiki:
@@ -55,11 +60,16 @@ class Wiki:
                 self.__class__ = ClosedWiki
                 return
             self.name = data['name']
-            self.domain = data['domain']
+            try:
+                self.domain = re.match('^(?:(?:https?\:)?\/\/)?(.*)$', data['url']).group(1)
+            except AttributeError:
+                self.domain = data['domain']
+            
             self.language = data['lang']
             
             self.hub = data['hub']
             self.stats = data['stats']
+            del self.stats['users']
             
             self.discussions = 'discussions' in data['stats']
             
@@ -73,13 +83,16 @@ class Wiki:
     def updateFromDump(self, data):
         for attr in ['name', 'domain', 'language', 'hub', 'discussions']:
             setattr(self, attr, data.get(attr, getattr(self, attr, None)))
+    @property
+    def code(self):
+        return getCode(self.domain)
     
     def dump(self):
-        keys = ['id', 'name', 'domain', 'language', 'hub', 'discussions']
+        keys = ['id', 'name', 'domain', 'code', 'language', 'hub', 'discussions']
         noneKeys = ['wordmark', 'image']
         
         if self.dumpWikiVariables:
-            keys += ['mainpage', 'categories', 'anonediting', 'hasapp', 'coppa', 'theme']
+            keys += ['mainpage', 'categories', 'anonediting', 'coppa', 'theme']
             noneKeys += ['favicon']
         
         data = {}
@@ -105,7 +118,7 @@ class Wiki:
     
     dumpWikiVariables = False
     def getWikiVariables(self):
-        vars = api.getWikiVariables(self)
+        vars = api.getWikiVariables(self.domain)
         
         self.mainpage = vars.get('mainPageTitle', None)
         self.categories = set(vars.get('wikiCategories', []))
@@ -113,9 +126,8 @@ class Wiki:
         
         self.favicon = vars.get('favicon', None)
         
-        self.anonediting = vars.get('disableAnonymousEditing', None)
+        self.anonediting = not vars.get('disableAnonymousEditing', False)
         
-        self.hasapp = vars.get('enableFandomAppSmartBanner', None)
         self.coppa = vars.get('isCoppaWiki', None)
         
         self.theme = {

@@ -5,7 +5,7 @@ from pywikibot.exceptions import NoPage
 from json import loads
 from datetime import datetime
 
-from include.wiki import newWiki, Wiki, InvalidWiki, ClosedWiki, _wikis as allWikis
+from include.wiki import newWiki, getCode as getWikiCode, Wiki, InvalidWiki, ClosedWiki, _wikis as allWikis
 from include import api, luad, tools
 
 # Debug
@@ -18,8 +18,36 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'skipdetails': False,
         'skipadmins': False,
     }
-    
-    languages = None
+    settings = {
+        'languages': None,
+        
+        'article_threshold': 5,
+        'image_threshold': 0,
+        
+        'list_module': 'Wikis/list',
+        'queue_module': 'Wikis/queue',
+        'aliases_module': 'Wikis/aliases',
+        'removed_module': 'Wikis/removed',
+        
+        'remove_keys': None,
+        
+        'keep_days': 10,
+    }
+    summaries = {
+        'default': 'Bot updates data module',
+        
+        'list_create': 'Bot creates the list of wikis',
+        'list_update': 'Bot updates the list of wikis',
+        
+        'queue_create': 'Bot creates the queue',
+        'queue_update': 'Bot clears the queue',
+        
+        'aliases_create': 'Bot creates the list of aliases',
+        'aliases_update': 'Bot updates the list of aliases',
+        
+        'removed_create': 'Bot creates the lof of removals',
+        'removed_update': 'Bot updates the lof of removals',
+    }
     
     __instance = None
     def __new__(cls):
@@ -52,7 +80,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
         self.site.login()
         
-        api.languages = self.languages = ['pl']
+        self.getSettings()
     
     @property
     def current_page(self):
@@ -64,13 +92,34 @@ class Bot(pywikibot.bot.SingleSiteBot):
             self._current_page = page
             output(u'\n\r\n\r>>> \03{{lightpurple}}{0}\03{{default}} <<<'.format(page.title()))
     
+    def getSettings(self):
+        title = self._site.mediawiki_message('custom-list-bot-module')
+        data = self.getData(title)
+        
+        for key in ['languages', 'remove_keys']:
+            self.settings[key] = data.get(key, self.settings[key])
+        self.settings['keep_days'] = max(1, data.get('keep_days', self.settings['keep_days']))
+        
+        api.languages = self.settings['languages']
+        
+        for key in ['article', 'image']:
+            self.settings[key + '_threshold'] = data.get('thresholds', {}).get('list_' + key + 's', self.settings[key + '_threshold'])
+        
+        for key in ['list', 'queue', 'aliases', 'removed']:
+            self.settings[key + '_module'] =  pywikibot.page.Page(self.site, data.get('modules', {}).get(key, self.settings[key + '_module']), ns = 828)
+        
     # Lua data
     def getData(self, name):
-        page = pywikibot.page.Page(self.site, name, ns = 828)
-        return luad.loads(page.get())
+        page = name if isinstance(name, pywikibot.page.Page) else pywikibot.page.Page(self.site, name, ns = 828)
+        try:
+            return luad.loads(page.get())
+        except pywikibot.exceptions.NoPage:
+            return None
         
-    def saveData(self, name, data, summary = "Robot aktualizuje moduł z danymi", **kwargs):
-        page = self.current_page = pywikibot.page.Page(self.site, name, ns = 828)
+    def saveData(self, name, data, summary = None, summary_key = None, **kwargs):
+        page = self.current_page = name if isinstance(name, pywikibot.page.Page) else pywikibot.page.Page(self.site, name, ns = 828)
+        
+        summary = summary or self.summaries.get(summary_key, self.summaries['default'])
         
         newtext = 'return ' + luad.dumps(data, indent = 4)
         try:
@@ -81,12 +130,17 @@ class Bot(pywikibot.bot.SingleSiteBot):
         if newtext == oldtext:
             return output('No changes')
         
-        pywikibot.showDiff(oldtext, newtext)
+        #pywikibot.showDiff(oldtext, newtext)
+        output('Summary: {}'.format(summary))
+        
         if self.getOption('always'):
             choice = 'y'
         else:
-            choice = pywikibot.input_choice('Do you want to accept these changes?', [('Yes', 'y'), ('No', 'n')], default='N')
+            choice = pywikibot.input_choice('Do you want to accept these changes?', [('Yes', 'y'), ('Yes to all', 'a'), ('No', 'n')], default='N')
         
+        if choice == 'a':
+            self.options['always'] = True
+            choice = 'y'
         if choice == 'y':
             page.put(newtext, summary, **kwargs)
     
@@ -140,20 +194,44 @@ class Bot(pywikibot.bot.SingleSiteBot):
         return lst
         
     def getWAMWikis(self):
-        if self.languages is None:
+        if self.settings['languages'] is None:
             return api.getWAMIndex()
         res = []
-        for lang in self.languages:
+        for lang in self.settings['languages']:
             res += api.getWAMIndex(lang)
         return res
     
     def getQueuedWikis(self):
-        # TODO: wiki oczekujące
-        return [3, 4, 1407124, 12345, 652632] #1743907
+        lst = []
+        lst2 = []
+        try:
+            for id in self.getData(self.settings['queue_module']):
+                try:
+                    lst += [int(id)]
+                except ValueError:
+                    lst2 += [id]
+        except TypeError:
+            pass
+        
+        total = len(lst2)
+        if total > 0:
+            output('Found {} urls in the queue.'.format(total))
+            i = 0
+            tools.progressBar(0, 'Progress (0/{})'.format(total))
+            try:
+                for url in lst2:
+                    data = api.getWikiVariables(url)
+                    lst += [int(data['id'])]
+                    i += 1
+                    tools.progressBar(i/total, 'Progress ({}/{})'.format(i, total))
+            finally:
+                print()
+        
+        #lst += [3, 4, 1407124, 12345, 652632, 1743907, 1,2,3,4,5,6,7,8,9]
+        # TODO: stare metody
+        return lst
     
     def run(self):
-        api.languages = self.languages
-        
         self.step1()
         self.step2()
         
@@ -185,7 +263,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
         output('\n\rFound \03{{lightaqua}}{:d}\03{{default}} unique wiki id(s) overall'.format(len(ids)))
         
-        for id in ids: Wiki(id)
+        for id in ids:
+            Wiki(id)
     
     
     toAdd = set()
@@ -212,7 +291,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
             elif isinstance(wiki, InvalidWiki):
                 wiki.status = 'invalid'
                 self.addToTable('gray', id, wiki)
-            elif self.languages is not None and wiki.language not in self.languages:
+            elif self.settings['languages'] is not None and wiki.language not in self.settings['languages']:
                 if wiki.onList:
                     self.toRemove.add(wiki)
                 wiki.status = 'badlang'
@@ -240,8 +319,6 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 getattr(wiki, method)()
                 i += 1
                 tools.progressBar(i/total, 'Progress ({}/{})'.format(i, total))
-                import time
-                time.sleep(1)
         finally:
             print()
     
@@ -280,10 +357,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             elif choice == 'q':
                 raise pywikibot.bot.QuitKeyboardInterrupt
     
-    def end(self):
-        output('\n\r\03{lightyellow}Last step\03{default}: Saving data')
-        
-        cleanup = ['category'] # TODO: settings
+    def saveList(self):
+        self.current_page = self.settings['list_module']
         
         for wiki in self.toRemove:
             del self.wikidata[wiki.id]
@@ -304,12 +379,55 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 else:
                     self.wikidata[wiki.id][key] = dump[key]
             
-            for key in cleanup:
-                try:
-                    del self.wikidata[wiki.id][key]
-                except KeyError:
-                    pass
+            self.wikidata[wiki.id]['stats'] = {key: self.wikidata[wiki.id]['stats'][key] for key in sorted(self.wikidata[wiki.id]['stats'].keys())[-self.settings['keep_days']:]}
+            try:
+                for key in self.settings['remove_keys']:
+                    try:
+                        del self.wikidata[wiki.id][key]
+                    except KeyError:
+                        pass
+            except TypeError:
+                pass
         
-        self.saveData('Lista/wiki', self.wikidata)
+        self.saveData(self.settings['list_module'], self.wikidata, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
+    
+    def saveQueue(self):
+        self.current_page = self.settings['queue_module']
         
+        self.saveData(self.settings['queue_module'], [], summary_key = 'queue_update' if self.settings['queue_module'].exists() else 'queue_create')
+    
+    def saveAliases(self):
+        self.current_page = self.settings['aliases_module']
         
+        data = self.getData(self.settings['aliases_module'])
+        
+        for alias in list(data.keys()):
+            if data[alias] not in self.wikidata:
+                del data[alias]
+                continue
+            
+            code = getWikiCode(alias)
+            if alias != code:
+                data[code] = data[alias]
+                del data[alias]
+            
+        for id in self.wikidata:
+            data[self.wikidata[id]['code']] = id
+        
+        self.saveData(self.settings['aliases_module'], data, summary_key = 'aliases_update' if self.settings['aliases_module'].exists() else 'aliases_create')
+    
+    def saveRemoved(self):
+        self.current_page = self.settings['removed_module']
+        
+        data = self.getData(self.settings['removed_module'])
+        
+        self.saveData(self.settings['removed_module'], data, summary_key = 'removed_update' if self.settings['removed_module'].exists() else 'removed_create')
+        
+    
+    def end(self):
+        output('\n\r\03{lightyellow}Last step\03{default}: Saving data')
+        
+        self.saveList()
+        self.saveQueue()
+        self.saveAliases()
+        self.saveRemoved()

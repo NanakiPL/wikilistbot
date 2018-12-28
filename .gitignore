@@ -4,3 +4,4 @@ logs*
 apicache* 
 __pycache__* 
 user-*.py 
+*.bat
