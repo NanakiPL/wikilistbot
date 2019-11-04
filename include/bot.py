@@ -1,9 +1,10 @@
 # -*- coding: utf-8  -*-
-import pywikibot, re, sys
+import pywikibot, re, sys, time
 from pywikibot import output
 from pywikibot.exceptions import NoPage
 from json import loads
 from datetime import datetime
+from math import floor
 
 from include.wiki import newWiki, getCode as getWikiCode, Wiki, InvalidWiki, ClosedWiki, _wikis as allWikis
 from include import api, luad, tools
@@ -110,6 +111,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
     # Lua data
     def getData(self, name):
+        # TODO: Walidacja i fallback do starszej wersji
         page = name if isinstance(name, pywikibot.page.Page) else pywikibot.page.Page(self.site, name, ns = 828)
         try:
             return luad.loads(page.get())
@@ -178,13 +180,12 @@ class Bot(pywikibot.bot.SingleSiteBot):
     def wikidata(self):
         if self._wikidata is None:
             data = self.getData('Module:Lista/wiki')
-            # TODO: Walidacja i fallback do starszej wersji
             if isinstance(data, tuple):
-                self._wikidata = data[0]
-            elif isinstance(data, list):
-                self._wikidata = dict(enumerate(data))
+                data = data[0]
+            if isinstance(data, dict) and 'wikis' in data:
+                self._wikidata = data['wikis']
             else:
-                self._wikidata = data
+                self._wikidata = {}
         return self._wikidata
     
     def getCurrentWikis(self):
@@ -390,7 +391,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
             except TypeError:
                 pass
         
-        self.saveData(self.settings['list_module'], self.wikidata, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
+        self.saveData(self.settings['list_module'], { 'wikis': self.wikidata, 'updated': floor(time.time())}, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
     
     def saveQueue(self):
         self.current_page = self.settings['queue_module']
