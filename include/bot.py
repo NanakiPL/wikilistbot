@@ -181,6 +181,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             # TODO: Walidacja i fallback do starszej wersji
             if isinstance(data, tuple):
                 self._wikidata = data[0]
+            elif isinstance(data, list):
+                self._wikidata = dict(enumerate(data))
             else:
                 self._wikidata = data
         return self._wikidata
@@ -367,7 +369,6 @@ class Bot(pywikibot.bot.SingleSiteBot):
             self.wikidata[wiki.id] = wiki.dump()
         
         for wiki in self.toUpdate:
-            pass
             dump = wiki.dump()
                         
             for key, value in dump.items():
