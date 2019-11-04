@@ -130,7 +130,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         if newtext == oldtext:
             return output('No changes')
         
-        #pywikibot.showDiff(oldtext, newtext)
+        pywikibot.showDiff(oldtext, newtext)
         output('Summary: {}'.format(summary))
         
         if self.getOption('always'):

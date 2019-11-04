@@ -18,7 +18,7 @@ def newWiki(data):
         return InvalidWiki(data['id']).update(data)
 
 def getCode(text):
-    return re.sub('\.(wikia|fandom)\.com(\/|$)', r'\2', text, flags = re.I)
+    return re.sub('\.(wikia\.com|wikia\.org|fandom\.com)(\/|$)', r'\2', text, flags = re.I)
 
 _wikis = {}
 class Wiki:
@@ -64,6 +64,7 @@ class Wiki:
                 self.domain = re.match('^(?:(?:https?\:)?\/\/)?(.*)$', data['url']).group(1)
             except AttributeError:
                 self.domain = data['domain']
+            self.domain = self.domain.rstrip('/')
             
             self.language = data['lang']
             
