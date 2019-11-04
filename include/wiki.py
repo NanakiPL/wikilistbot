@@ -88,11 +88,13 @@ class Wiki:
     def code(self):
         return getCode(self.domain)
     
-    def dump(self):
+    def dump(self, detailed = False):
         keys = ['id', 'name', 'domain', 'code', 'language', 'hub', 'discussions']
         noneKeys = ['wordmark', 'image']
         
-        if self.dumpWikiVariables:
+        if detailed:
+            if not self.has_details:
+                self.getWikiVariables()
             keys += ['mainpage', 'categories', 'anonediting', 'coppa', 'theme']
             noneKeys += ['favicon']
         
@@ -110,14 +112,17 @@ class Wiki:
         for key in noneKeys:
             data[key] = getattr(self, key, None)
         
-        today = datetime.now().strftime('%Y-%m-%d')
-        data['stats'] = {
-            today: self.stats.copy()
-        }
+        if detailed:
+            today = datetime.now().strftime('%Y-%m-%d')
+            data['stats'] = {
+                today: self.stats.copy()
+            }
+        else:
+            data['stats'] = self.stats.copy()
         
         return data
     
-    dumpWikiVariables = False
+    has_details = False
     def getWikiVariables(self):
         vars = api.getWikiVariables(self.domain)
         
@@ -139,13 +144,13 @@ class Wiki:
         for key in [key for key in vars.get('theme', {}).keys() if key.startswith('color-')]:
             self.theme[key] = vars['theme'].get(key, None)
         
-        self.dumpWikiVariables = True
+        self.has_details = True
         
-    dumpAdminCount = False
+    has_admin_count = False
     def getAdminCount(self):
+        # TODO
         
-        
-        self.dumpAdminCount = True
+        self.has_admin_count = True
 
 class WikiAPI:
     wiki = None
