@@ -19,6 +19,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'force': False,
         'skipdetails': False,
         'skipadmins': False,
+        'skipwam': False,
+        'skipqueue': False,
     }
     settings = {
         'languages': None,
@@ -27,7 +29,6 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'image_threshold': 0,
         
         'list_module': 'Wikis/list',
-        'wiki_module': 'Wikis/list/%d',
         'queue_module': 'Wikis/queue',
         'aliases_module': 'Wikis/aliases',
         'removed_module': 'Wikis/removed',
@@ -41,6 +42,9 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
         'list_create': 'Bot creates the list of wikis',
         'list_update': 'Bot updates the list of wikis',
+        
+        'wiki_create': 'Bot creates wiki data module',
+        'wiki_update': 'Bot updates wiki data module',
         
         'queue_create': 'Bot creates the queue',
         'queue_update': 'Bot clears the queue',
@@ -77,6 +81,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             elif arg == '-force':         self.options['force'] = True
             elif arg == '-skipdetails':   self.options['skipdetails'] = True
             elif arg == '-skipadmins':    self.options['skipadmins'] = True
+            elif arg == '-skipwam':       self.options['skipwam'] = True
+            elif arg == '-skipqueue':     self.options['skipqueue'] = True
             else: self.args.append(arg)
         
         self._site = pywikibot.Site()
@@ -110,7 +116,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         for key in ['article', 'image']:
             self.settings[key + '_threshold'] = data.get('thresholds', {}).get('list_' + key + 's', self.settings[key + '_threshold'])
         
-        for key in ['list', 'wiki', 'queue', 'aliases', 'removed']:
+        for key in ['list', 'queue', 'aliases', 'removed']:
             self.settings[key + '_module'] =  pywikibot.page.Page(self.site, data.get('modules', {}).get(key, self.settings[key + '_module']), ns = 828)
         
     # Lua data
@@ -141,7 +147,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         except pywikibot.exceptions.NoPage:
             oldtext = ''
         
-        if newtext == oldtext:
+        if re.sub('\[\'updated_timestamp\'\]\s*=\s*\d+,', '', newtext) == re.sub('\[\'updated_timestamp\'\]\s*=\s*\d+,', '', oldtext):
             return output('No changes')
         
         pywikibot.showDiff(oldtext, newtext)
@@ -263,12 +269,20 @@ class Bot(pywikibot.bot.SingleSiteBot):
         output('        Found \03{{lightaqua}}{:d}\03{{default}} wiki(s)'.format(len(A)))
         
         output('\n\r\03{lightyellow}   1.2\03{default}: WAM')
-        B = set(self.getWAMWikis()) - A
-        output('        Found \03{{lightaqua}}{:d}\03{{default}} more wiki(s)'.format(len(B)))
+        if not self.getOption('skipwam'):
+            B = set(self.getWAMWikis()) - A
+            output('        Found \03{{lightaqua}}{:d}\03{{default}} more wiki(s)'.format(len(B)))
+        else:
+            B = set()
+            output('        \03{lightyellow}skipping...\03{default}')
         
         output('\n\r\03{lightyellow}   1.3\03{default}: Queued list')
-        C = set(self.getQueuedWikis()) - A - B
-        output('        Found \03{{lightaqua}}{:d}\03{{default}} more wiki(s)'.format(len(C)))
+        if not self.getOption('skipqueue'):
+            C = set(self.getQueuedWikis()) - A - B
+            output('        Found \03{{lightaqua}}{:d}\03{{default}} more wiki(s)'.format(len(C)))
+        else:
+            C = set()
+            output('        \03{lightyellow}skipping...\03{default}')
         
         ids = A | B | C
         
@@ -338,6 +352,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
             print()
     
     def step3(self):
+        return
         output('\n\r\03{lightyellow}Step 3\03{default}: Detailed wiki info')
         if self.getOption('skipdetails'):
             return output('        \03{lightyellow}skipping...\03{default}')
@@ -394,7 +409,6 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 else:
                     self.wikidata[wiki.id][key] = dump[key]
             
-            self.wikidata[wiki.id]['stats'] = {key: self.wikidata[wiki.id]['stats'][key] for key in sorted(self.wikidata[wiki.id]['stats'].keys())[-self.settings['keep_days']:]}
             try:
                 for key in self.settings['remove_keys']:
                     try:
@@ -404,7 +418,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
             except TypeError:
                 pass
         
-        self.saveData(self.settings['list_module'], { 'wikis': self.wikidata, 'updated': self.time}, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
+        self.saveData(self.settings['list_module'], { 'wikis': self.wikidata, 'updated_timestamp': self.time}, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
         
     
     def saveQueue(self):
@@ -415,7 +429,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
     def saveAliases(self):
         self.current_page = self.settings['aliases_module']
         
-        data = self.getData(self.settings['aliases_module'])
+        data = self.getData(self.settings['aliases_module']) or {}
         
         for alias in list(data.keys()):
             if data[alias] not in self.wikidata:
@@ -449,7 +463,36 @@ class Bot(pywikibot.bot.SingleSiteBot):
         self.saveData(self.settings['removed_module'], data, summary_key = 'removed_update' if self.settings['removed_module'].exists() else 'removed_create')
 
     def saveWikis(self):
-        pass
+        tpl = '{}/{{}}'.format(self.settings['list_module'].title(with_ns = False))
+        for id, wiki in sorted([(wiki.id, wiki) for wiki in self.toAdd | self.toUpdate]):
+            page = pywikibot.page.Page(self.site, tpl.format(id), ns = 828)
+            self.current_page = page
+            
+            data = self.getData(page) or {}
+            data['updated_timestamp'] = self.time
+            
+            dump = wiki.dump(True, not self.getOption('skipdetails'))
+            
+            for key, value in dump.items():
+                if isinstance(value, dict):
+                    try:
+                        data[key] = {**data[key], **dump[key]}
+                    except KeyError:
+                        data[key] = dump[key]
+                else:
+                    data[key] = dump[key]
+            
+            data['stats'] = {key: data['stats'][key] for key in sorted(data['stats'].keys())[-self.settings['keep_days']:]}
+            try:
+                for key in self.settings['remove_keys']:
+                    try:
+                        del data[key]
+                    except KeyError:
+                        pass
+            except TypeError:
+                pass
+            
+            self.saveData(page, data, summary_key = 'wiki_update' if self.settings['removed_module'].exists() else 'wiki_create')
         
     
     def end(self):
@@ -459,3 +502,4 @@ class Bot(pywikibot.bot.SingleSiteBot):
         self.saveQueue()
         self.saveAliases()
         self.saveRemoved()
+        self.saveWikis()

@@ -88,15 +88,14 @@ class Wiki:
     def code(self):
         return getCode(self.domain)
     
-    def dump(self, detailed = False):
+    def dump(self, detailed = False, load_missing = True):
         keys = ['id', 'name', 'domain', 'code', 'language', 'hub', 'discussions']
         noneKeys = ['wordmark', 'image']
         
         if detailed:
-            if not self.has_details:
+            if not self.has_details and load_missing:
                 self.getWikiVariables()
             keys += ['mainpage', 'categories', 'anonediting', 'coppa', 'theme']
-            noneKeys += ['favicon']
         
         data = {}
         for key in keys:
