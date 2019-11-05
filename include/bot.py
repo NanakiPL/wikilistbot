@@ -111,12 +111,20 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
     # Lua data
     def getData(self, name):
-        # TODO: Walidacja i fallback do starszej wersji
         page = name if isinstance(name, pywikibot.page.Page) else pywikibot.page.Page(self.site, name, ns = 828)
+        
         try:
-            return luad.loads(page.get())
+            history = page.getVersionHistory(forceReload = True, getAll = True)
         except pywikibot.exceptions.NoPage:
             return None
+        
+        for rev in history:
+            text = page.getOldVersion(rev.revid)
+            try:
+                return luad.loads(text)
+            except Exception:
+                output('Skipping revision #{0.revid:d} by {0.user:s} - invalid Lua code'.format(rev))
+        return None
         
     def saveData(self, name, data, summary = None, summary_key = None, **kwargs):
         page = self.current_page = name if isinstance(name, pywikibot.page.Page) else pywikibot.page.Page(self.site, name, ns = 828)
