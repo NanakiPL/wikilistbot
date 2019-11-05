@@ -1,9 +1,10 @@
 # -*- coding: utf-8  -*-
-import pywikibot, re, sys, time
+import pywikibot, re, sys
 from pywikibot import output
 from pywikibot.exceptions import NoPage
 from json import loads
 from datetime import datetime
+from time import time
 from math import floor
 
 from include.wiki import newWiki, getCode as getWikiCode, Wiki, InvalidWiki, ClosedWiki, _wikis as allWikis
@@ -26,13 +27,14 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'image_threshold': 0,
         
         'list_module': 'Wikis/list',
+        'wiki_module': 'Wikis/list/%d',
         'queue_module': 'Wikis/queue',
         'aliases_module': 'Wikis/aliases',
         'removed_module': 'Wikis/removed',
         
         'remove_keys': None,
         
-        'keep_days': 10,
+        'keep_days': 14,
     }
     summaries = {
         'default': 'Bot updates data module',
@@ -46,8 +48,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'aliases_create': 'Bot creates the list of aliases',
         'aliases_update': 'Bot updates the list of aliases',
         
-        'removed_create': 'Bot creates the lof of removals',
-        'removed_update': 'Bot updates the lof of removals',
+        'removed_create': 'Bot creates the list of removals',
+        'removed_update': 'Bot updates the list of removals',
     }
     
     __instance = None
@@ -60,6 +62,9 @@ class Bot(pywikibot.bot.SingleSiteBot):
     def __init__(self):
         if(self.__initialized): return
         self.__initialized = True
+        
+        self.time = floor(time())
+        self.today = datetime.fromtimestamp(self.time).strftime('%Y-%m-%d')
         
         self.options = {
             'always': False,
@@ -77,7 +82,6 @@ class Bot(pywikibot.bot.SingleSiteBot):
         self._site = pywikibot.Site()
         
         output('\n\r\n\r=== Working on \03{{lightaqua}}{0}\03{{default}} ===\n\r'.format(self.site.sitename, self.site.username()))
-        self.today = datetime.now().strftime('%Y-%m-%d')
         
         self.site.login()
         
@@ -106,7 +110,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         for key in ['article', 'image']:
             self.settings[key + '_threshold'] = data.get('thresholds', {}).get('list_' + key + 's', self.settings[key + '_threshold'])
         
-        for key in ['list', 'queue', 'aliases', 'removed']:
+        for key in ['list', 'wiki', 'queue', 'aliases', 'removed']:
             self.settings[key + '_module'] =  pywikibot.page.Page(self.site, data.get('modules', {}).get(key, self.settings[key + '_module']), ns = 828)
         
     # Lua data
@@ -353,6 +357,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
     
     def step4(self):
         output('\n\r\03{lightyellow}Step 4\03{default}: Active admin counts')
+        return output('        \03{lightred}not implemented yet...\03{default}')
         if self.getOption('skipadmins'):
             return output('        \03{lightyellow}skipping...\03{default}')
         output('\03{gray}  Note: This process is done on per-wiki basis.\n\r        It can be skipped using keyboard interrupt or via -skipadmins argument.')
@@ -399,7 +404,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             except TypeError:
                 pass
         
-        self.saveData(self.settings['list_module'], { 'wikis': self.wikidata, 'updated': floor(time.time())}, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
+        self.saveData(self.settings['list_module'], { 'wikis': self.wikidata, 'updated': self.time}, summary_key = 'list_update' if self.settings['list_module'].exists() else 'list_create')
+        
     
     def saveQueue(self):
         self.current_page = self.settings['queue_module']
@@ -429,9 +435,21 @@ class Bot(pywikibot.bot.SingleSiteBot):
     def saveRemoved(self):
         self.current_page = self.settings['removed_module']
         
-        data = self.getData(self.settings['removed_module'])
+        data = self.getData(self.settings['removed_module']) or {}
+        
+        for wiki in self.toRemove:
+            if wiki.id not in data:
+                data[wiki.id] = {
+                    'id': wiki.id,
+                    'domain': wiki.domain,
+                    'timestamp': self.time,
+                    'reason': wiki.status
+                }
         
         self.saveData(self.settings['removed_module'], data, summary_key = 'removed_update' if self.settings['removed_module'].exists() else 'removed_create')
+
+    def saveWikis(self):
+        pass
         
     
     def end(self):
