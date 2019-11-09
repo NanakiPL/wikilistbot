@@ -165,38 +165,6 @@ class WikiAPI:
     def getActiveAdmins(self):
         return None
 
-#def getJSON(url, tries = 5, delay = 2):
-#    t, d = tries, delay
-#    while t > 1:
-#        try:
-#            t -= 1
-#            with urllib.request.urlopen(url) as response:
-#                res = response.read().decode('utf-8')
-#                return json.loads(res)
-#        except urllib.error.HTTPError as e:
-#            if e.code in [404, 410]: raise
-#            print('{0}, retrying in {1} seconds'.format(str(e), d))
-#            time.sleep(d)
-#            d *= 2
-#        except urllib.error.URLError as e:
-#            e.url = url
-#            if str(e).find('getaddrinfos') > -1:
-#                print('Host not found, retrying in {0} seconds'.format(d))
-#                time.sleep(d)
-#                d *= 2
-#            else:
-#                raise
-#        except socket_error as e:
-#            print('{0}, retrying in {1} seconds'.format(str(e), d))
-#            time.sleep(d)
-#        except (ValueError, json.decoder.JSONDecodeError) as e:
-#            if res.find('page-Special_CloseWiki') > -1:
-#                raise ClosedWiki(url)
-#            if res.find('page-Community_Central_Not_a_valid') > -1:
-#                raise InvalidWiki(url)
-#            raise JSONError('No JSON object could be decoded', url)
-#    raise JSONError('Failed after {0} tries'.format(tries), url)
-
 class InvalidWiki(Wiki):
     pass
 
