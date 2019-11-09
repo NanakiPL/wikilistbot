@@ -67,8 +67,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         if(self.__initialized): return
         self.__initialized = True
         
-        self.time = floor(time())
-        self.today = datetime.fromtimestamp(self.time).strftime('%Y-%m-%d')
+        start = time()
         
         self.options = {
             'always': False,
@@ -92,6 +91,16 @@ class Bot(pywikibot.bot.SingleSiteBot):
         self.site.login()
         
         self.getSettings()
+        
+        output('  Initialization time: {:.2f}s'.format(time() - start))
+    
+    @property
+    def time(self):
+        try:
+            return self._time
+        except AttributeError:
+            self._time = floor(time())
+        return self._time
     
     @property
     def current_page(self):
@@ -253,14 +262,16 @@ class Bot(pywikibot.bot.SingleSiteBot):
         return lst
     
     def run(self):
+        start = time()
+        
         self.step1()
         self.step2()
         
         self.step3()
-        self.step4()
-        
         self.end()
         
+        output('\n  Run time: {:.2f}s'.format(time() - start))
+    
     def step1(self):
         output('\n\r\03{lightyellow}Step 1\03{default}: Grabbing lists')
         
@@ -352,26 +363,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
             print()
     
     def step3(self):
-        return
-        output('\n\r\03{lightyellow}Step 3\03{default}: Detailed wiki info')
-        if self.getOption('skipdetails'):
-            return output('        \03{lightyellow}skipping...\03{default}')
-            
-        output('\03{gray}  Note: This process is done on per-wiki basis.\n\r        It can be skipped using keyboard interrupt or via -skipdetails argument.\n\r        Doing so won\'t delete data that\'s already there, it just won\'t be updated\03{default}')
-        
-        try:
-            self.runForAll('getWikiVariables')
-        except KeyboardInterrupt:
-            output('\n\r\03{lightblue}Task was finished partially.\03{default}')
-            choice = pywikibot.input_choice('Do you want to keep partial data on save or ignore it?', [('Keep', 'k'), ('Ignore', 'i')], default='k')
-            if choice == 'i':
-                for wiki in self.toAdd | self.toUpdate:
-                    wiki.dumpWikiVariables = False
-            elif choice == 'q':
-                raise pywikibot.bot.QuitKeyboardInterrupt
-    
-    def step4(self):
-        output('\n\r\03{lightyellow}Step 4\03{default}: Active admin counts')
+        output('\n\r\03{lightyellow}Step 3\03{default}: Active admin counts')
         return output('        \03{lightred}not implemented yet...\03{default}')
         if self.getOption('skipadmins'):
             return output('        \03{lightyellow}skipping...\03{default}')
@@ -464,7 +456,11 @@ class Bot(pywikibot.bot.SingleSiteBot):
 
     def saveWikis(self):
         tpl = '{}/{{}}'.format(self.settings['list_module'].title(with_ns = False))
-        for id, wiki in sorted([(wiki.id, wiki) for wiki in self.toAdd | self.toUpdate]):
+        wikis = sorted([(wiki.id, wiki) for wiki in self.toAdd | self.toUpdate])
+        
+        i = 0
+        total = len(wikis)
+        for id, wiki in wikis:
             page = pywikibot.page.Page(self.site, tpl.format(id), ns = 828)
             self.current_page = page
             
@@ -493,6 +489,9 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 pass
             
             self.saveData(page, data, summary_key = 'wiki_update' if self.settings['removed_module'].exists() else 'wiki_create')
+            
+            i += 1
+            output('Finished {} out of {} ({:.1%})'.format(i, total, i/total))
         
     
     def end(self):
