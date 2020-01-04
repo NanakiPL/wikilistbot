@@ -5,3 +5,7 @@
 
 pywikibot
 ordered_set
+python-dateutil
+
+# luad
+luaparser>=2.0.2
