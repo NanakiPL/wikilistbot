@@ -3,8 +3,6 @@
 import urllib.parse, urllib.request, urllib.error, json, time, re
 from socket import error as socket_error
 
-from pprint import pprint
-
 __server = 'https://www.wikia.com/api/v1/'
 languages = None
 
@@ -60,7 +58,6 @@ class JSONError(Exception):
 def call(path, query = {}, server = None):
     qs = urllib.parse.urlencode(query)
     url = ''.join([server or __server, path, '?' if qs else '', qs])
-    
     return getJSON(url)
 
 @cached

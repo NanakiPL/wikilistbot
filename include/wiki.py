@@ -1,13 +1,11 @@
 # -*- coding: utf-8  -*-
 
 import re
+import dateutil.parser
 from datetime import datetime
 from collections import OrderedDict, Container
 
 from include import api
-
-#debug
-from pprint import pprint
 
 def newWiki(data):
     try:
@@ -37,6 +35,9 @@ class Wiki:
     
     onList = False
     status = None
+    
+    admin_groups = ['bureaucrat', 'sysop']
+    mod_groups = ['threadmoderator', 'content-moderator', 'chatmoderator']
     
     def __new__(cls, id):
         id = int(id)
@@ -116,6 +117,9 @@ class Wiki:
             data['stats'] = {
                 today: self.stats.copy()
             }
+            if self.has_admin_count:
+                for key in ['active_bureaucrats', 'active_admins']:
+                    data[key] = [user['username'] for user in getattr(self, key, [])]
         else:
             data['stats'] = self.stats.copy()
         
@@ -146,14 +150,30 @@ class Wiki:
         self.has_details = True
         
     has_admin_count = False
-    def getAdminCount(self):
-        # TODO
+    def getAdminCount(self, active_time):
+        users = self.api.getUsers(groups = self.admin_groups + self.mod_groups, edits = 0, order = 'dtedit:desc')
         
+        self.active_bureaucrats = []
+        self.active_admins = []
+        self.active_mods = []
+        for user in users:
+            if user['last_edit'] is None or (datetime.now() - user['last_edit']) > active_time:
+                continue
+            
+            if any([x in user['groups'] for x in self.admin_groups]):
+                self.active_admins += [user]
+                if 'bureaucrat' in user['groups']:
+                    self.active_bureaucrats += [user]
+            elif any([x in user['groups'] for x in self.mod_groups]):
+                self.active_mods += [user]
+        
+        self.stats['activeBureaucrats'] = len(self.active_bureaucrats)
+        self.stats['activeAdmins'] = len(self.active_admins)
+        self.stats['activeMods'] = len(self.active_mods)
         self.has_admin_count = True
 
 class WikiAPI:
     wiki = None
-    script = '/api.php'
     
     def __init__(self, wiki):
         self.wiki = wiki
@@ -161,9 +181,43 @@ class WikiAPI:
     @property
     def server(self):
         return self.wiki.domain
+    
+    def getUsers(self, groups = [], edits = 5, order = 'revcnt:desc'):
+        query = {
+            'uselang': 'en',
+            'action': 'ajax',
+            'rs': 'ListusersAjax::axShowUsers',
+            'groups': ','.join(groups),
+            'edits': edits,
+            'limit': '100',
+            'order': order,
+        }
+        data = api.call('/index.php', query, server = 'https://' + self.wiki.domain)
         
-    def getActiveAdmins(self):
-        return None
+        res = []
+        cols = data['sColumns'].split(',')
+        username_pattern = re.compile('\>([^<]+)\</a\>')
+        date_pattern = re.compile('\>([^>]*(january|february|march|april|may|june|july|august|september|october|november|december)[^<]*)\<', flags = re.I)
+        tag_pattern = re.compile('\<[^>]*\>')
+        
+        for row in data['aaData']:
+            row = {cols[i]:v for i,v in enumerate(row)}
+            
+            user = {}
+            user['username'] = username_pattern.search(row['username']).group(1)
+            
+            m = date_pattern.search(row['dtedit'])
+            if m is not None:
+                user['last_edit'] = dateutil.parser.parse(m.group(1))
+            else:
+                user['last_edit'] = None
+            
+            user['groups'] = [x.strip() for x in tag_pattern.sub('', row['groups']).split(',')]
+            
+            user['edits'] = int(tag_pattern.sub('', row['revcnt']))
+            
+            res += [user]
+        return res
 
 class InvalidWiki(Wiki):
     pass

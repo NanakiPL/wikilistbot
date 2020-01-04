@@ -3,15 +3,12 @@ import pywikibot, re, sys
 from pywikibot import output
 from pywikibot.exceptions import NoPage
 from json import loads
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time
 from math import floor
 
 from include.wiki import newWiki, getCode as getWikiCode, Wiki, InvalidWiki, ClosedWiki, _wikis as allWikis
 from include import api, luad, tools
-
-# Debug
-from pprint import pprint
 
 class Bot(pywikibot.bot.SingleSiteBot):
     availableOptions = {
@@ -36,6 +33,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
         'remove_keys': None,
         
         'keep_days': 14,
+        
+        'active_days': 60,
     }
     summaries = {
         'default': 'Bot updates data module',
@@ -118,7 +117,9 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
         for key in ['languages', 'remove_keys']:
             self.settings[key] = data.get(key, self.settings[key])
-        self.settings['keep_days'] = max(1, data.get('keep_days', self.settings['keep_days']))
+        
+        for key in ['keep_days', 'active_days']:
+            self.settings[key] = max(1, data.get(key, self.settings[key]))
         
         api.languages = self.settings['languages']
         
@@ -347,7 +348,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         
         self.printLogTable()
     
-    def runForAll(self, method):
+    def runForAll(self, method, *args, **kwargs):
         lst = sorted([(wiki.id, wiki) for wiki in self.toAdd | self.toUpdate])
         
         total = len(lst)
@@ -356,7 +357,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
         tools.progressBar(0, 'Progress (0/{})'.format(total))
         try:
             for id, wiki in lst:
-                getattr(wiki, method)()
+                getattr(wiki, method)(*args, **kwargs)
                 i += 1
                 tools.progressBar(i/total, 'Progress ({}/{})'.format(i, total))
         finally:
@@ -364,13 +365,13 @@ class Bot(pywikibot.bot.SingleSiteBot):
     
     def step3(self):
         output('\n\r\03{lightyellow}Step 3\03{default}: Active admin counts')
-        return output('        \03{lightred}not implemented yet...\03{default}')
+        
         if self.getOption('skipadmins'):
             return output('        \03{lightyellow}skipping...\03{default}')
         output('\03{gray}  Note: This process is done on per-wiki basis.\n\r        It can be skipped using keyboard interrupt or via -skipadmins argument.')
         
         try:
-            self.runForAll('getAdminCount')
+            self.runForAll('getAdminCount', timedelta(days = self.settings['active_days']))
         except KeyboardInterrupt:
             output('\n\r\03{lightblue}Task was finished partially.\03{default}')
             choice = pywikibot.input_choice('Do you want to keep partial data on save or ignore it?', [('Keep', 'k'), ('Ignore', 'i')], default='k')
@@ -467,6 +468,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             data = self.getData(page) or {}
             data['updated_timestamp'] = self.time
             
+            stats = data['stats']
+            
             dump = wiki.dump(True, not self.getOption('skipdetails'))
             
             for key, value in dump.items():
@@ -478,7 +481,7 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 else:
                     data[key] = dump[key]
             
-            data['stats'] = {key: data['stats'][key] for key in sorted(data['stats'].keys())[-self.settings['keep_days']:]}
+            data['stats'] = {key: {**stats[key], **data['stats'][key]} for key in sorted(data['stats'].keys())[-self.settings['keep_days']:]}
             try:
                 for key in self.settings['remove_keys']:
                     try:
