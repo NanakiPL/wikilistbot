@@ -468,7 +468,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
             data = self.getData(page) or {}
             data['updated_timestamp'] = self.time
             
-            stats = data['stats']
+            stats = data['stats'].copy()
+            
             
             dump = wiki.dump(True, not self.getOption('skipdetails'))
             
@@ -481,7 +482,8 @@ class Bot(pywikibot.bot.SingleSiteBot):
                 else:
                     data[key] = dump[key]
             
-            data['stats'] = {key: {**stats[key], **data['stats'][key]} for key in sorted(data['stats'].keys())[-self.settings['keep_days']:]}
+            data['stats'] = {key: {**stats.get(key, {}), **data['stats'][key]} for key in sorted(data['stats'].keys())[-self.settings['keep_days']:]}
+            
             try:
                 for key in self.settings['remove_keys']:
                     try:

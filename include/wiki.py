@@ -119,7 +119,7 @@ class Wiki:
             }
             if self.has_admin_count:
                 for key in ['active_bureaucrats', 'active_admins']:
-                    data[key] = list(sorted([user['username'] for user in getattr(self, key, [])]))
+                    data[key] = sorted([user['username'] for user in getattr(self, key, [])])
         else:
             data['stats'] = self.stats.copy()
         
