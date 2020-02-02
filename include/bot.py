@@ -468,8 +468,10 @@ class Bot(pywikibot.bot.SingleSiteBot):
             data = self.getData(page) or {}
             data['updated_timestamp'] = self.time
             
-            stats = data['stats'].copy()
-            
+            try:
+                stats = data['stats'].copy()
+            except KeyError:
+                stats = {}
             
             dump = wiki.dump(True, not self.getOption('skipdetails'))
             
